@@ -3,22 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Login Admin - ELDA MAZZOCCHI SCARZELLA</title>
+  <title>Login Admin - EMS Kahoot</title>
   
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;800&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="style.css">
+
   <script src="js/theme.js" defer></script>
-  </head>
+</head>
 
 <body class="page-center">
 
   <div class="card" style="max-width: 420px;">
-    <img src="assets/logo.png" class="logo" alt="ELDA MAZZOCCHI SCARZELLA" />
+    <img src="https://eldaquiz-cfc72.web.app/assets/logo.png" class="logo" alt="EMS" />
     <h1>Accesso Amministratore</h1>
     <p>Accesso riservato all'account admin.</p>
 
-    <input id="email" type="email" placeholder="Email" class="input-field" />
+    <input id="email" type="email" placeholder="admin@ems.it" value="admin@ems.it" class="input-field" />
     <input id="password" type="password" placeholder="Password" class="input-field" />
 
     <button class="btn btn-primary" id="loginBtn" style="width:100%;">ACCEDI</button>
@@ -37,6 +38,7 @@
       const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value.trim();
       
+      // Accetta SOLO l'admin
       if (email !== 'admin@ems.it') {
         msg.textContent = "Solo l'account 'admin@ems.it' può accedere.";
         return;
@@ -47,9 +49,10 @@
       }
       
       try {
+        // Firebase gestisce il login
         await adminLogin(email, password);
         msg.textContent = "Accesso effettuato. Reindirizzamento...";
-        setTimeout(() => window.location.href = 'admin.html', 700);
+        setTimeout(() => window.location.href = 'admin.html', 700); // Invia all'admin
       } catch (e) {
         console.error(e);
         msg.textContent = "Credenziali non valide.";
