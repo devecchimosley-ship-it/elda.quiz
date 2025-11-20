@@ -1,14 +1,9 @@
 // ===================================================================================
 // Presenter app: Gestisce Presentazioni (multiple slides)
-// VERSIONE OTTIMIZZATA
 // ===================================================================================
 import { auth, onAuthStateChanged, logoutUser, db, doc, setDoc, collection, onSnapshot, getDocs, updateDoc, getDoc } from "./firebase.js";
 import { Chart } from "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js";
 
-// === OTTIMIZZAZIONE: Costanti per una facile modifica ===
-const CHART_COLORS = ['#7c3aed', '#5b21b6', '#a855f7', '#d8b4fe'];
-
-// Stato globale
 let currentResponsesUnsub = null;
 let currentChart = null;
 let allPresentations = [];
@@ -16,7 +11,9 @@ let livePresentationData = null; // Contiene i dati della presentazione live
 let livePresentationId = null;
 let liveSlideIndex = -1;
 
-// Elementi UI (raggruppati per chiarezza)
+// Elementi UI
+const lobbyView = document.getElementById('lobbyView');
+const liveView = document.getElementById('liveView');
 const pinDisplay = document.getElementById('pinDisplay');
 const liveTitle = document.getElementById('liveTitle');
 const liveQuestion = document.getElementById('liveQuestion');
@@ -25,7 +22,6 @@ const prevSlideBtn = document.getElementById('prevSlideBtn');
 const nextSlideBtn = document.getElementById('nextSlideBtn');
 const stopPresentationBtn = document.getElementById('stopPresentationBtn');
 const presentationListEl = document.getElementById('presentationList');
-const logoutBtn = document.getElementById('logoutBtn');
 
 // Protezione pagina
 onAuthStateChanged(auth, (user) => {
@@ -33,156 +29,187 @@ onAuthStateChanged(auth, (user) => {
   else loadPresentations();
 });
 
-// Logout
-logoutBtn?.addEventListener('click', async () => {
+document.getElementById('logoutBtn')?.addEventListener('click', async () => {
   await logoutUser();
   window.location.href = 'login.html';
 });
 
-// === OTTIMIZZAZIONE: Funzione UI centralizzata ===
-/**
- * Aggiorna l'intera UI del presentatore in base allo stato globale
- */
-function updatePresenterUI() {
-  if (!livePresentationData) {
-    // Stato "Nessuna presentazione attiva"
-    pinDisplay.textContent = '—';
-    liveTitle.textContent = '—';
-    liveQuestion.textContent = '—';
-    slideCounter.textContent = '— / —';
-    prevSlideBtn.disabled = true;
-    nextSlideBtn.disabled = true;
-    stopPresentationBtn.disabled = true; // Disabilita anche lo stop
-  } else {
-    // Stato "Presentazione attiva"
-    pinDisplay.textContent = livePresentationData.pin || '...';
-    liveTitle.textContent = livePresentationData.title;
-    stopPresentationBtn.disabled = false;
-
-    const slideData = livePresentationData.slides[liveSlideIndex];
-    if (slideData) {
-      liveQuestion.textContent = slideData.question;
-      slideCounter.textContent = `${liveSlideIndex + 1} / ${livePresentationData.slides.length}`;
-      
-      prevSlideBtn.disabled = (liveSlideIndex === 0);
-      nextSlideBtn.disabled = (liveSlideIndex === livePresentationData.slides.length - 1);
-    }
-  }
-}
-
 // Carica la lista delle presentazioni
 async function loadPresentations() {
   presentationListEl.innerHTML = '<em>Caricamento...</em>';
-  try {
-    const snapshot = await getDocs(collection(db, "presentations"));
-    allPresentations = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  const snapshot = await getDocs(collection(db, "presentations"));
+  allPresentations = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    if (allPresentations.length === 0) {
-      presentationListEl.innerHTML = '<em>Nessuna presentazione creata dall\'Admin.</em>';
-      return;
-    }
-    
-    presentationListEl.innerHTML = allPresentations.map(p => `
-      <div class="quiz-item">
-        <div style="flex:1">
-          <strong>${p.title}</strong><br/>
-          <small style="opacity:0.85">${(p.slides || []).length} slides</small>
-        </div>
-        <div style="display:flex;gap:0.4rem">
-          <button class="btn btn-secondary" data-id="${p.id}" data-action="launch" 
-            ${p.status === 'live' ? 'style="background:#3b82f6;color:white;"' : ''}>
-            ${p.status === 'live' ? 'Live' : 'Lancia'}
-          </button>
-        </div>
-      </div>
-    `).join('');
-
-    presentationListEl.querySelectorAll('button[data-action="launch"]').forEach(btn => {
-      btn.addEventListener('click', () => launchPresentation(btn.dataset.id));
-    });
-  } catch (err) {
-    console.error("Errore nel caricare le presentazioni:", err);
-    presentationListEl.innerHTML = '<em style="color:#ef4444;">Errore nel caricare.</em>';
+  if (allPresentations.length === 0) {
+    presentationListEl.innerHTML = '<em>Nessuna presentazione creata dall\'Admin.</em>';
+    return;
   }
+  
+  presentationListEl.innerHTML = allPresentations.map(p => `
+    <div class="quiz-item">
+      <div style="flex:1">
+        <strong>${p.title}</strong><br/>
+        <small style="opacity:0.85">${(p.slides || []).length} slides</small>
+      </div>
+      <div style="display:flex;gap:0.4rem">
+        <button class="btn ghost" data-id="${p.id}" data-action="launch" 
+          ${p.status === 'live' ? 'style="background:#3b82f6;color:white;"' : ''}>
+          ${p.status === 'live' ? 'Live' : 'Lancia'}
+        </button>
+      </div>
+    </div>
+  `).join('');
+
+  presentationListEl.querySelectorAll('button[data-action="launch"]').forEach(btn => {
+    btn.addEventListener('click', () => launchPresentation(btn.dataset.id));
+  });
 }
 
 // Lancia una presentazione
 async function launchPresentation(id) {
-  // === OTTIMIZZAZIONE: Aggiunto try...catch ===
-  try {
-    livePresentationData = allPresentations.find(p => p.id === id);
-    if (!livePresentationData) return alert('Presentazione non trovata.');
-    if (!livePresentationData.slides || livePresentationData.slides.length === 0) {
-      return alert('Impossibile lanciare: questa presentazione non ha slide.');
-    }
-    
-    livePresentationId = id;
-    
-    const pin = (Math.floor(Math.random() * 900000) + 100000).toString();
-    // Salva il pin anche nell'oggetto locale per l'UI
-    livePresentationData.pin = pin; 
-    
-    await updateDoc(doc(db, "presentations", id), { status: 'live', pin: pin });
-    
-    // Imposta stato globale e avvia dalla prima slide (index 0)
-    await goToSlide(0); 
-    await loadPresentations(); // Aggiorna la lista per mostrare il bottone "Live"
-  } catch (err) {
-    console.error("Errore durante il lancio della presentazione:", err);
-    alert("Si è verificato un errore nel lanciare la presentazione. Riprova.");
-    // Resetta lo stato in caso di fallimento
-    livePresentationData = null;
-    livePresentationId = null;
-  }
+  livePresentationData = allPresentations.find(p => p.id === id);
+  if (!livePresentationData) return alert('Presentazione non trovata.');
+  livePresentationId = id;
+  
+  const pin = (Math.floor(Math.random() * 900000) + 100000).toString();
+  await updateDoc(doc(db, "presentations", id), { status: 'live', pin: pin });
+  
+  pinDisplay.textContent = pin;
+  liveTitle.textContent = livePresentationData.title;
+
+  // Imposta stato globale e avvia dalla prima slide (index 0)
+  await goToSlide(0); 
+  
+  // === MODIFICA: Scambia le viste ===
+  lobbyView.classList.add('hidden');
+  liveView.classList.remove('hidden');
+  // ================================
 }
 
 // Naviga a una slide specifica (index)
 async function goToSlide(index) {
-  // === OTTIMIZZAZIONE: Aggiunto try...catch ===
-  try {
-    if (!livePresentationData || !livePresentationData.slides) return;
-    if (index < 0 || index >= livePresentationData.slides.length) return;
-    
-    liveSlideIndex = index;
+  if (!livePresentationData || !livePresentationData.slides) return;
+  
+  // Controlla limiti
+  if (index < 0 || index >= livePresentationData.slides.length) return;
+  
+  liveSlideIndex = index;
 
-    // Aggiorna stato globale per i player
-    await setDoc(doc(db, "status", "livePresentation"), { 
-      activeId: livePresentationId, 
-      currentSlide: liveSlideIndex 
-    });
+  // Aggiorna stato globale per i player
+  await setDoc(doc(db, "status", "livePresentation"), { 
+    activeId: livePresentationId, 
+    currentSlide: liveSlideIndex 
+  });
 
-    // === OTTIMIZZAZIONE: Chiama la funzione UI centralizzata ===
-    updatePresenterUI();
+  // Aggiorna UI Presentatore
+  const currentSlideData = livePresentationData.slides[liveSlideIndex];
+  liveQuestion.textContent = currentSlideData.question;
+  slideCounter.textContent = `Slide ${liveSlideIndex + 1} / ${livePresentationData.slides.length}`;
+  
+  // Aggiorna bottoni
+  prevSlideBtn.disabled = (liveSlideIndex === 0);
+  nextSlideBtn.disabled = (liveSlideIndex === livePresentationData.slides.length - 1);
 
-    // Riavvia il listener del grafico per la nuova slide
-    const currentSlideData = livePresentationData.slides[liveSlideIndex];
-    startResponsesListener(livePresentationId, liveSlideIndex, currentSlideData.answers);
-  } catch (err) {
-    console.error("Errore nel cambiare slide:", err);
-    alert("Si è verificato un errore nel cambiare slide. Riprova.");
-  }
+  // Riavvia il listener del grafico per la nuova slide
+  startResponsesListener(livePresentationId, liveSlideIndex, currentSlideData.answers, currentSlideData.type);
 }
 
 // Ferma la presentazione
 stopPresentationBtn.addEventListener('click', async () => {
-  // === OTTIMIZZAZIONE: Aggiunto try...catch ===
-  try {
-    if(livePresentationId) {
-      await updateDoc(doc(db, "presentations", livePresentationId), { status: 'finished' });
-    }
-    // Resetta lo stato globale per i player
-    await setDoc(doc(db, "status", "livePresentation"), { activeId: null, currentSlide: -1 });
+  if(livePresentationId) {
+    await updateDoc(doc(db, "presentations", livePresentationId), { status: 'finished' });
+  }
+  await setDoc(doc(db, "status", "livePresentation"), { activeId: null, currentSlide: -1 });
 
-    // Resetta stato locale
-    livePresentationData = null;
-    livePresentationId = null;
-    liveSlideIndex = -1;
-    
-    // === OTTIMIZZAZIONE: Chiama la funzione UI centralizzata ===
-    updatePresenterUI();
-    
-    if (currentResponsesUnsub) currentResponsesUnsub();
-    if (currentChart) {
-      currentChart.data.labels = [];
-      currentChart.data.datasets[0].data = [];
-      currentChart
+  // Resetta UI
+  pinDisplay.textContent = '—';
+  liveTitle.textContent = '—';
+  liveQuestion.textContent = '—';
+  slideCounter.textContent = '— / —';
+  livePresentationData = null;
+  livePresentationId = null;
+  liveSlideIndex = -1;
+  
+  if (currentResponsesUnsub) currentResponsesUnsub();
+  if (currentChart) {
+    currentChart.data.datasets[0].data = [];
+    currentChart.update();
+  }
+  
+  // === MODIFICA: Scambia le viste e ricarica la lobby ===
+  await loadPresentations(); // Ricarica la lista per aggiornare lo stato del bottone
+  liveView.classList.add('hidden');
+  lobbyView.classList.remove('hidden');
+  // ====================================================
+});
+
+// Listener bottoni navigazione
+prevSlideBtn.addEventListener('click', () => goToSlide(liveSlideIndex - 1));
+nextSlideBtn.addEventListener('click', () => goToSlide(liveSlideIndex + 1));
+
+
+// Responses listener and chart
+function startResponsesListener(presentationId, slideIndex, answers, slideType) {
+  const answerCount = answers.length;
+  // Etichette brevi per il grafico
+  const answerLabels = answers.map((ans, i) => `Risp. ${i + 1}`); 
+
+  // Colori standard
+  let bgColors = ['#7c3aed','#5b21b6','#a855f7','#d8b4fe'];
+
+  // === MODIFICA: Evidenzia la risposta corretta se è un QUIZ ===
+  if (slideType === 'quiz') {
+    const correctIndex = livePresentationData.slides[slideIndex].correctIndex;
+    if (correctIndex >= 0) {
+      // Imposta tutti i colori a uno standard, tranne quello corretto
+      bgColors = new Array(answerCount).fill('#7c3aed'); // Viola di default
+      bgColors[correctIndex] = '#10b981'; // Verde per la corretta
+    }
+  }
+  // =========================================================
+
+  if (currentResponsesUnsub) currentResponsesUnsub(); // Ferma listener precedente
+
+  // Inizializza o aggiorna il grafico
+  const ctx = document.getElementById('resultsChart');
+  if (!ctx) return;
+  if (!currentChart) {
+    currentChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: answerLabels,
+        datasets: [{ 
+          label: 'Risposte', 
+          data: new Array(answerCount).fill(0), 
+          backgroundColor: bgColors 
+        }]
+      },
+      options: { 
+        responsive: true, 
+        maintainAspectRatio: false, 
+        scales: { y: { beginAtZero: true, ticks: { color: '#e6e9ef' } }, x: { ticks: { color: '#e6e9ef' } } },
+        plugins: { legend: { display: false } }
+      }
+    });
+  } else {
+    currentChart.data.labels = answerLabels;
+    currentChart.data.datasets[0].data = new Array(answerCount).fill(0);
+    currentChart.data.datasets[0].backgroundColor = bgColors; // Applica i colori aggiornati
+    currentChart.update();
+  }
+
+  // Ascolta la sub-collection 'responses'
+  const responsesCol = collection(db, 'presentations', presentationId, 'responses');
+  currentResponsesUnsub = onSnapshot(responsesCol, (snapshot) => {
+    const counts = new Array(answerCount).fill(0);
+    snapshot.docs.forEach(d => {
+      const data = d.data();
+      // FILTRA solo per la slide corrente
+      if (data?.slide === slideIndex && typeof data?.answer === 'number' && counts[data.answer] !== undefined) {
+        counts[data.answer]++;
+      }
+    });
+    currentChart.data.datasets[0].data = counts;
+    currentChart.update();
+  });
+}
