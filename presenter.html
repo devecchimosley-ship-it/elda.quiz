@@ -8,17 +8,22 @@
   <style>
     body { 
       font-family:'Poppins',sans-serif; 
-      /* Stile ripreso da login/index */
       background:linear-gradient(135deg,#1e1b4b,#4c1d95,#7c3aed); 
       color:#e6e9ef; 
       margin:0; 
-      padding:2rem;
+      padding:2rem; /* Rimosso quando in fullscreen */
       min-height: 100vh;
       box-sizing: border-box;
+      transition: padding 0.3s ease; /* Transizione fluida */
     }
+    
+    /* === NUOVO: Stile body quando live === */
+    body.live-active {
+      padding: 0; /* Rimuove il padding per il fullscreen */
+    }
+    
     .container { max-width:1100px; margin:0 auto; }
     
-    /* Stile "Glass" per le card */
     .card { 
       background:rgba(255,255,255,0.12); 
       backdrop-filter:blur(16px); 
@@ -55,11 +60,14 @@
 
     .hidden { display:none; }
 
-    /* === NUOVO LAYOUT LIVE VIEW === */
+    /* === LAYOUT LIVE VIEW MODIFICATO === */
     #liveView {
       display: flex;
       flex-direction: column;
-      height: calc(100vh - 4rem); /* Altezza piena meno padding body */
+      height: 100vh; /* Ora occupa sempre 100% dell'altezza visibile */
+      width: 100%;
+      padding: 2rem; /* Padding interno alla live view */
+      box-sizing: border-box;
     }
     .live-header {
       text-align: center;
@@ -72,7 +80,6 @@
       opacity: 0.8;
       display: block;
     }
-    /* PIN grande e chiaro */
     #pinDisplay { 
       font-size:4.5rem; 
       font-weight: 800;
@@ -81,12 +88,12 @@
     }
 
     .live-body {
-      flex: 1; /* Occupa tutto lo spazio centrale */
+      flex: 1; 
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 2rem;
       margin-top: 1.5rem;
-      min-height: 300px; /* Altezza minima per il grafico */
+      min-height: 300px; 
     }
     
     #live-content {
@@ -109,7 +116,6 @@
       border-radius: 20px;
       position: relative;
     }
-    /* Canvas responsivo */
     #resultsChart { 
       width: 100%; 
       height: 100%; 
@@ -129,7 +135,7 @@
       font-size: 1.1rem;
       padding: 1rem 2rem;
     }
-    /* === FINE NUOVO LAYOUT === */
+    /* === FINE MODIFICHE === */
 
   </style>
 </head>
