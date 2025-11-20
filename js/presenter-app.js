@@ -23,6 +23,33 @@ const nextSlideBtn = document.getElementById('nextSlideBtn');
 const stopPresentationBtn = document.getElementById('stopPresentationBtn');
 const presentationListEl = document.getElementById('presentationList');
 
+// === NUOVE FUNZIONI PER FULLSCREEN ===
+function enterFullScreen() {
+  const elem = document.documentElement; // Usa l'intero <html>
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen();
+  } else if (elem.mozRequestFullScreen) { /* Firefox */
+    elem.mozRequestFullScreen();
+  } else if (elem.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+    elem.webkitRequestFullscreen();
+  } else if (elem.msRequestFullscreen) { /* IE/Edge */
+    elem.msRequestFullscreen();
+  }
+}
+
+function exitFullScreen() {
+  if (document.exitFullscreen) {
+    document.exitFullscreen();
+  } else if (document.mozCancelFullScreen) { /* Firefox */
+    document.mozCancelFullScreen();
+  } else if (document.webkitExitFullscreen) { /* Chrome, Safari and Opera */
+    document.webkitExitFullscreen();
+  } else if (document.msExitFullscreen) { /* IE/Edge */
+    document.msExitFullscreen();
+  }
+}
+// =======================================
+
 // Protezione pagina
 onAuthStateChanged(auth, (user) => {
   if (!user) window.location.href = 'login.html';
@@ -77,40 +104,35 @@ async function launchPresentation(id) {
   pinDisplay.textContent = pin;
   liveTitle.textContent = livePresentationData.title;
 
-  // Imposta stato globale e avvia dalla prima slide (index 0)
   await goToSlide(0); 
   
-  // === MODIFICA: Scambia le viste ===
+  // === MODIFICA: Scambia le viste E VAI FULLSCREEN ===
   lobbyView.classList.add('hidden');
   liveView.classList.remove('hidden');
-  // ================================
+  document.body.classList.add('live-active'); // Aggiunge la classe al body
+  enterFullScreen(); // Attiva il fullscreen
+  // ================================================
 }
 
 // Naviga a una slide specifica (index)
 async function goToSlide(index) {
   if (!livePresentationData || !livePresentationData.slides) return;
-  
-  // Controlla limiti
   if (index < 0 || index >= livePresentationData.slides.length) return;
   
   liveSlideIndex = index;
 
-  // Aggiorna stato globale per i player
   await setDoc(doc(db, "status", "livePresentation"), { 
     activeId: livePresentationId, 
     currentSlide: liveSlideIndex 
   });
 
-  // Aggiorna UI Presentatore
   const currentSlideData = livePresentationData.slides[liveSlideIndex];
   liveQuestion.textContent = currentSlideData.question;
   slideCounter.textContent = `Slide ${liveSlideIndex + 1} / ${livePresentationData.slides.length}`;
   
-  // Aggiorna bottoni
   prevSlideBtn.disabled = (liveSlideIndex === 0);
   nextSlideBtn.disabled = (liveSlideIndex === livePresentationData.slides.length - 1);
 
-  // Riavvia il listener del grafico per la nuova slide
   startResponsesListener(livePresentationId, liveSlideIndex, currentSlideData.answers, currentSlideData.type);
 }
 
@@ -136,11 +158,13 @@ stopPresentationBtn.addEventListener('click', async () => {
     currentChart.update();
   }
   
-  // === MODIFICA: Scambia le viste e ricarica la lobby ===
-  await loadPresentations(); // Ricarica la lista per aggiornare lo stato del bottone
+  // === MODIFICA: Scambia le viste, ricarica la lobby E ESCI DAL FULLSCREEN ===
+  await loadPresentations(); 
   liveView.classList.add('hidden');
   lobbyView.classList.remove('hidden');
-  // ====================================================
+  document.body.classList.remove('live-active'); // Rimuove la classe dal body
+  exitFullScreen(); // Disattiva il fullscreen
+  // ======================================================================
 });
 
 // Listener bottoni navigazione
@@ -148,29 +172,22 @@ prevSlideBtn.addEventListener('click', () => goToSlide(liveSlideIndex - 1));
 nextSlideBtn.addEventListener('click', () => goToSlide(liveSlideIndex + 1));
 
 
-// Responses listener and chart
+// Responses listener and chart (Invariato)
 function startResponsesListener(presentationId, slideIndex, answers, slideType) {
   const answerCount = answers.length;
-  // Etichette brevi per il grafico
   const answerLabels = answers.map((ans, i) => `Risp. ${i + 1}`); 
-
-  // Colori standard
   let bgColors = ['#7c3aed','#5b21b6','#a855f7','#d8b4fe'];
 
-  // === MODIFICA: Evidenzia la risposta corretta se è un QUIZ ===
   if (slideType === 'quiz') {
     const correctIndex = livePresentationData.slides[slideIndex].correctIndex;
     if (correctIndex >= 0) {
-      // Imposta tutti i colori a uno standard, tranne quello corretto
-      bgColors = new Array(answerCount).fill('#7c3aed'); // Viola di default
+      bgColors = new Array(answerCount).fill('#7c3aed'); 
       bgColors[correctIndex] = '#10b981'; // Verde per la corretta
     }
   }
-  // =========================================================
 
-  if (currentResponsesUnsub) currentResponsesUnsub(); // Ferma listener precedente
+  if (currentResponsesUnsub) currentResponsesUnsub(); 
 
-  // Inizializza o aggiorna il grafico
   const ctx = document.getElementById('resultsChart');
   if (!ctx) return;
   if (!currentChart) {
@@ -187,24 +204,22 @@ function startResponsesListener(presentationId, slideIndex, answers, slideType) 
       options: { 
         responsive: true, 
         maintainAspectRatio: false, 
-        scales: { y: { beginAtZero: true, ticks: { color: '#e6e9ef' } }, x: { ticks: { color: '#e6e9ef' } } },
+        scales: { y: { beginAtZero: true, ticks: { color: '#e6e9ef', stepSize: 1 } }, x: { ticks: { color: '#e6e9ef' } } },
         plugins: { legend: { display: false } }
       }
     });
   } else {
     currentChart.data.labels = answerLabels;
     currentChart.data.datasets[0].data = new Array(answerCount).fill(0);
-    currentChart.data.datasets[0].backgroundColor = bgColors; // Applica i colori aggiornati
+    currentChart.data.datasets[0].backgroundColor = bgColors; 
     currentChart.update();
   }
 
-  // Ascolta la sub-collection 'responses'
   const responsesCol = collection(db, 'presentations', presentationId, 'responses');
   currentResponsesUnsub = onSnapshot(responsesCol, (snapshot) => {
     const counts = new Array(answerCount).fill(0);
     snapshot.docs.forEach(d => {
       const data = d.data();
-      // FILTRA solo per la slide corrente
       if (data?.slide === slideIndex && typeof data?.answer === 'number' && counts[data.answer] !== undefined) {
         counts[data.answer]++;
       }
